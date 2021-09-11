@@ -18,6 +18,11 @@ lazy_static! {
         ("i32", "i32"),
         ("u8", "u8"),
         ("bool", "bool"),
+        ("u32", "u32"),
+        ("lv_coord_t", "i16"),
+        ("lv_opa_t", "u8"),
+        ("lv_arc_mode_t", "ArcMode"),
+        ("lv_bar_mode_t", "BarMode"),
         ("* const cty :: c_char", "_"),
     ]
     .iter()
@@ -96,7 +101,7 @@ impl Rusty for LvFunc {
         let original_func_name = format_ident!("{}", self.name.as_str());
 
         // generate constructor
-        if new_name.as_str().eq("create") {
+        if new_name.as_str().eq("create") && self.args.len() == 1 {
             return Ok(quote! {
 
                 pub fn new<C>(parent: &mut C) -> crate::LvResult<Self>
@@ -104,7 +109,7 @@ impl Rusty for LvFunc {
                     C: crate::NativeObject,
                 {
                     unsafe {
-                        let ptr = lvgl_sys::#original_func_name(parent.raw()?.as_mut(), core::ptr::null_mut());
+                        let ptr = lvgl_sys::#original_func_name(parent.raw()?.as_mut());
                         if let Some(raw) = core::ptr::NonNull::new(ptr) {
                             let core = <crate::Obj as crate::Widget>::from_raw(raw);
                             Ok(Self { core })
@@ -118,9 +123,9 @@ impl Rusty for LvFunc {
         }
 
         // We don't deal with methods that return types yet
-        if self.ret.is_some() {
+        /*if self.ret.is_some() {
             return Err(WrapperError::Skip);
-        }
+        }*/
 
         // Make sure all arguments can be generated, skip the first arg (self)!
         for arg in self.args.iter().skip(1) {
@@ -201,7 +206,7 @@ impl Rusty for LvFunc {
             });
 
         // TODO: Handle methods that return types
-        Ok(quote! {
+        /*Ok(quote! {
             pub fn #func_name(#args_decl) -> crate::LvResult<()> {
                 #args_processing
                 unsafe {
@@ -209,7 +214,120 @@ impl Rusty for LvFunc {
                 }
                 Ok(())
             }
-        })
+        })*/
+        if self.ret.is_some() {
+            let rn = self.ret.as_ref().unwrap().literal_name.clone();
+            if rn.starts_with('*') {
+                if rn.starts_with("* const cty :: c_char") {
+                    Ok(quote! {
+                        pub fn #func_name(#args_decl) -> crate::LvResult<&cstr_core::CStr> {
+                            #args_processing
+                            let ret = unsafe {
+                                cstr_core::CStr::from_ptr(lvgl_sys::#original_func_name(#args_call))
+                            };
+                            Ok(ret)
+                        }
+                    })
+                } else if rn.starts_with("* mut cty :: c_char")
+                    || rn.starts_with("* mut * const cty :: c_char")
+                {
+                    Ok(quote! {
+                        pub fn #func_name(#args_decl) -> crate::LvResult<&cstr_core::CStr> {
+                            #args_processing
+                            let ret = unsafe {
+                                cstr_core::CStr::from_ptr(lvgl_sys::#original_func_name(#args_call))
+                            };
+                            Ok(ret)
+                        }
+                    })
+                } else if rn.eq("* const cty :: c_void") {
+                    Ok(quote! {
+                        pub fn #func_name(#args_decl) -> crate::LvResult<* const cty :: c_void> {
+                            #args_processing
+                            unsafe {
+                                Ok(lvgl_sys::#original_func_name(#args_call))
+                            }
+                        }
+                    })
+                } else if rn.eq("* const lv_calendar_date_t") {
+                    Ok(quote! {
+                        pub fn #func_name(#args_decl) -> crate::LvResult<Option<&lv_calendar_date_t>> {
+                            #args_processing
+                            unsafe {
+                                Ok(lvgl_sys::#original_func_name(#args_call).as_ref())
+                            }
+                        }
+                    })
+                } else if rn.eq("* mut lv_calendar_date_t") {
+                    Ok(quote! {
+                        pub fn #func_name(#args_decl) -> crate::LvResult<Option<&mut lv_calendar_date_t>> {
+                            #args_processing
+                            unsafe {
+                                Ok(lvgl_sys::#original_func_name(#args_call).as_mut())
+                            }
+                        }
+                    })
+                } else if rn.eq("* mut lv_obj_t") {
+                    Ok(quote! {
+                        pub fn #func_name(#args_decl) -> crate::LvResult<&mut crate::Obj> {
+                            #args_processing
+                            let ret = unsafe {
+                                Ok(lvgl_sys::#original_func_name(#args_call).as_mut())
+                            };
+                            if ret.is_null() {
+                                Err(crate::LvError::InvalidReference)
+                            }else{
+                                Ok(Obj::from_raw(core::ptr::NonNull::new(ret)))
+                            }
+                        }
+                    })
+                } else {
+                    println!("--- skip  {}({}) -> {}", original_func_name, args_decl, rn);
+                    Err(WrapperError::Skip)
+                }
+            } else if rn.eq("lv_arc_mode_t") {
+                Ok(quote! {
+                    pub fn #func_name(#args_decl) -> crate::LvResult<ArcMode> {
+                        #args_processing
+                        let ret = unsafe {
+                            lvgl_sys::#original_func_name(#args_call)
+                        };
+                        ArcMode::from(ret)
+                    }
+                })
+            } else if rn.eq("lv_bar_mode_t") {
+                Ok(quote! {
+                    pub fn #func_name(#args_decl) -> crate::LvResult<BarMode> {
+                        #args_processing
+                        let ret = unsafe {
+                            lvgl_sys::#original_func_name(#args_call)
+                        };
+                        BarMode::from(ret)
+                    }
+                })
+            } else {
+                let ret_name = format_ident!("{}", self.ret.as_ref().unwrap().literal_name);
+                Ok(quote! {
+                    pub fn #func_name(#args_decl) -> crate::LvResult<#ret_name> {
+                        #args_processing
+                        let ret = unsafe {
+                            lvgl_sys::#original_func_name(#args_call)
+                        };
+                        Ok(ret)
+                    }
+                })
+            }
+        } else {
+            Ok(quote! {
+                pub fn #func_name(#args_decl) -> crate::LvResult<()> {
+                    #args_processing
+                    unsafe {
+                        lvgl_sys::#original_func_name(#args_call);
+                    }
+                    Ok(())
+                }
+            })
+        }
     }
 }
 
@@ -276,6 +394,12 @@ impl LvArg {
             quote! {
                 #ident.as_ptr()
             }
+        } else if self.typ.literal_name.as_str().eq("lv_bar_mode_t")
+            || self.typ.literal_name.as_str().eq("lv_arc_mode_t")
+        {
+            quote! {
+                #ident.into()
+            }
         } else {
             quote! {
                 #ident
@@ -322,7 +446,7 @@ impl LvType {
     }
 
     pub fn is_const(&self) -> bool {
-        self.literal_name.starts_with("const ")
+        self.literal_name.starts_with("* const ")
     }
 
     pub fn is_str(&self) -> bool {
@@ -403,7 +527,7 @@ impl CodeGen {
 
         functions
             .iter()
-            .filter(|e| create_func.is_match(e.name.as_str()) && e.args.len() == 2)
+            .filter(|e| create_func.is_match(e.name.as_str()) && e.args.len() >= 1)
             .map(|f| {
                 String::from(
                     create_func

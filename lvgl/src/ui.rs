@@ -16,7 +16,7 @@ static LVGL_IN_USE: AtomicBool = AtomicBool::new(false);
 // TODO: Make this an external configuration
 const REFRESH_BUFFER_LEN: usize = 2;
 // Declare a buffer for the refresh rate
-pub(crate) const BUF_SIZE: usize = lvgl_sys::LV_HOR_RES_MAX as usize * REFRESH_BUFFER_LEN;
+pub(crate) const BUF_SIZE: usize = lvgl_sys::LV_MEM_SIZE as usize;
 
 pub struct UI<T, C>
 where
@@ -66,22 +66,22 @@ where
         let refresh_buffer1 = [Color::from_rgb((0, 0, 0)).raw; BUF_SIZE];
         let refresh_buffer2 = [Color::from_rgb((0, 0, 0)).raw; BUF_SIZE];
 
-        let mut disp_buf = MaybeUninit::<lvgl_sys::lv_disp_buf_t>::uninit();
+        let mut disp_buf = MaybeUninit::<lvgl_sys::lv_disp_draw_buf_t>::uninit();
         let mut disp_drv = MaybeUninit::<lvgl_sys::lv_disp_drv_t>::uninit();
 
         unsafe {
             // Initialize the display buffer
-            lvgl_sys::lv_disp_buf_init(
+            lvgl_sys::lv_disp_draw_buf_init(
                 disp_buf.as_mut_ptr(),
                 Box::into_raw(Box::new(refresh_buffer1)) as *mut cty::c_void,
                 Box::into_raw(Box::new(refresh_buffer2)) as *mut cty::c_void,
-                lvgl_sys::LV_HOR_RES_MAX * REFRESH_BUFFER_LEN as u32,
+                lvgl_sys::LV_MEM_SIZE,
             );
             // Basic initialization of the display driver
             lvgl_sys::lv_disp_drv_init(disp_drv.as_mut_ptr());
             let mut disp_drv = Box::new(disp_drv.assume_init());
             // Assign the buffer to the display
-            disp_drv.buffer = Box::into_raw(Box::new(disp_buf.assume_init()));
+            disp_drv.draw_buf = Box::into_raw(Box::new(disp_buf.assume_init()));
             // Set your driver function
             disp_drv.flush_cb = Some(display_callback_wrapper::<T, C>);
             disp_drv.user_data = &mut self.display_data as *mut _ as *mut cty::c_void;
@@ -128,7 +128,7 @@ where
 
     pub fn task_handler(&mut self) {
         unsafe {
-            lvgl_sys::lv_task_handler();
+            lvgl_sys::lv_timer_handler();
         }
     }
 }

@@ -32,7 +32,7 @@ use ::alloc::boxed::Box;
 mod allocator;
 
 mod support;
-mod ui;
+//mod ui;
 #[macro_use]
 mod lv_core;
 pub mod widgets;
@@ -49,7 +49,7 @@ use crate::mem::Box;
 
 pub use lv_core::*;
 pub use support::*;
-pub use ui::*;
+//pub use ui::*;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 

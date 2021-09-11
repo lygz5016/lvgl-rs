@@ -4,29 +4,29 @@ use std::{env, path::Path, path::PathBuf};
 static CONFIG_NAME: &str = "DEP_LV_CONFIG_PATH";
 
 fn main() {
-    let project_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-        .canonicalize()
-        .unwrap();
+    //let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).canonicalize().unwrap();
+    let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let shims_dir = project_dir.join("shims");
     let vendor = project_dir.join("vendor");
     let vendor_src = vendor.join("lvgl").join("src");
 
     let lv_config_dir = {
-        let conf_path = env::var(CONFIG_NAME)
-            .map(|raw_path| PathBuf::from(raw_path))
-            .unwrap_or_else(|_| {
-                match std::env::var("DOCS_RS") {
-                    Ok(_) => {
-                        // We've detected that we are building for docs.rs
-                        // so let's use the vendored `lv_conf.h` file.
-                        vendor.join("include")
-                    }
-                    Err(_) => panic!(
-                        "The environment variable {} is required to be defined",
-                        CONFIG_NAME
-                    ),
+        /*let conf_path = env::var(CONFIG_NAME)
+        .map(|raw_path| PathBuf::from(raw_path))
+        .unwrap_or_else(|_| {
+            match std::env::var("DOCS_RS") {
+                Ok(_) => {
+                    // We've detected that we are building for docs.rs
+                    // so let's use the vendored `lv_conf.h` file.
+                    vendor.join("include")
                 }
-            });
+                Err(_) => panic!(
+                    "The environment variable {} is required to be defined",
+                    CONFIG_NAME
+                ),
+            }
+        });*/
+        let conf_path = vendor.join("include");
 
         if !conf_path.exists() {
             panic!(
@@ -54,14 +54,14 @@ fn main() {
     };
 
     let mut cfg = Build::new();
-    add_c_files(&mut cfg, vendor_src.join("lv_core"));
-    add_c_files(&mut cfg, vendor_src.join("lv_draw"));
-    add_c_files(&mut cfg, vendor_src.join("lv_font"));
-    add_c_files(&mut cfg, vendor_src.join("lv_gpu"));
-    add_c_files(&mut cfg, vendor_src.join("lv_hal"));
-    add_c_files(&mut cfg, vendor_src.join("lv_misc"));
-    add_c_files(&mut cfg, vendor_src.join("lv_themes"));
-    add_c_files(&mut cfg, vendor_src.join("lv_widgets"));
+    add_c_files(&mut cfg, vendor_src.join("core"));
+    add_c_files(&mut cfg, vendor_src.join("draw"));
+    add_c_files(&mut cfg, vendor_src.join("extra"));
+    add_c_files(&mut cfg, vendor_src.join("font"));
+    add_c_files(&mut cfg, vendor_src.join("gpu"));
+    add_c_files(&mut cfg, vendor_src.join("hal"));
+    add_c_files(&mut cfg, vendor_src.join("misc"));
+    add_c_files(&mut cfg, vendor_src.join("widgets"));
     add_c_files(&mut cfg, &lv_config_dir);
     add_c_files(&mut cfg, &shims_dir);
 

@@ -37,20 +37,3 @@ impl Arc {
     //     Ok(())
     // }
 }
-
-/// The different parts, of an arc object.
-#[derive(Debug, Copy, Clone, PartialEq)]
-#[repr(u8)]
-pub enum ArcPart {
-    /// The background of the arc.
-    Background = lvgl_sys::LV_ARC_PART_BG as u8,
-    /// The indicator of the arc.
-    /// This is what moves/changes, depending on the arc's value.
-    Indicator = lvgl_sys::LV_ARC_PART_INDIC as u8,
-}
-
-impl From<ArcPart> for u8 {
-    fn from(part: ArcPart) -> Self {
-        part as u8
-    }
-}
