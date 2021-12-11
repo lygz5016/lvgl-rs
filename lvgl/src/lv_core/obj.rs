@@ -31,7 +31,7 @@ impl NativeObject for Obj {
 /// A wrapper for all LVGL common operations on generic objects.
 pub trait Widget: NativeObject {
     type SpecialEvent;
-    type Part: Into<u8>;
+    type Part: Into<i32>;
 
     /// Construct an instance of the object from a raw pointer.
     ///
@@ -40,9 +40,37 @@ pub trait Widget: NativeObject {
     ///
     unsafe fn from_raw(raw_pointer: ptr::NonNull<lvgl_sys::lv_obj_t>) -> Self;
 
-    fn add_style(&self, part: Self::Part, style: Style) -> LvResult<()> {
+    fn set_parent<P>(&mut self, parent: &mut P) -> LvResult<()>
+    where
+        P: NativeObject,
+    {
         unsafe {
-            lvgl_sys::lv_obj_add_style(self.raw()?.as_mut(), part.into(), Box::into_raw(style.raw));
+            lvgl_sys::lv_obj_set_parent(self.raw()?.as_mut(), parent.raw()?.as_mut());
+        }
+        Ok(())
+    }
+
+    fn move_foreground(&mut self) -> LvResult<()> {
+        unsafe {
+            lvgl_sys::lv_obj_move_foreground(self.raw()?.as_mut());
+        }
+        Ok(())
+    }
+
+    fn move_background(&mut self) -> LvResult<()> {
+        unsafe {
+            lvgl_sys::lv_obj_move_background(self.raw()?.as_mut());
+        }
+        Ok(())
+    }
+
+    fn add_style(
+        &self,
+        style: &mut Style,
+        selector: lvgl_sys::lv_style_selector_t,
+    ) -> LvResult<()> {
+        unsafe {
+            lvgl_sys::lv_obj_add_style(self.raw()?.as_mut(), style.raw_as_mut(), selector);
         };
         Ok(())
     }
@@ -82,18 +110,36 @@ pub trait Widget: NativeObject {
         }
         Ok(())
     }
+    fn set_align(&mut self, align: Align) -> LvResult<()> {
+        unsafe {
+            lvgl_sys::lv_obj_set_align(self.raw()?.as_mut(), align.into());
+        }
+        Ok(())
+    }
 
-    fn set_align<C>(&mut self, base: &mut C, align: Align, x_mod: i32, y_mod: i32) -> LvResult<()>
+    fn align(&mut self, align: Align, x_ofs: i32, y_ofs: i32) -> LvResult<()> {
+        unsafe {
+            lvgl_sys::lv_obj_align(
+                self.raw()?.as_mut(),
+                align.into(),
+                x_ofs as lvgl_sys::lv_coord_t,
+                y_ofs as lvgl_sys::lv_coord_t,
+            );
+        }
+        Ok(())
+    }
+
+    fn align_to<C>(&mut self, base: &mut C, align: Align, x_ofs: i32, y_ofs: i32) -> LvResult<()>
     where
         C: NativeObject,
     {
         unsafe {
-            lvgl_sys::lv_obj_align(
+            lvgl_sys::lv_obj_align_to(
                 self.raw()?.as_mut(),
-                base.raw()?.as_mut(),
+                base.raw()?.as_ref(),
                 align.into(),
-                x_mod as lvgl_sys::lv_coord_t,
-                y_mod as lvgl_sys::lv_coord_t,
+                x_ofs as lvgl_sys::lv_coord_t,
+                y_ofs as lvgl_sys::lv_coord_t,
             );
         }
         Ok(())
@@ -112,7 +158,14 @@ impl Widget for Obj {
 impl Default for Obj {
     fn default() -> Self {
         Self {
-            raw: unsafe { lvgl_sys::lv_obj_create(ptr::null_mut(), ptr::null_mut()) },
+            raw: unsafe { lvgl_sys::lv_obj_create(ptr::null_mut()) },
+        }
+    }
+}
+impl Drop for Obj {
+    fn drop(&mut self) {
+        if let Ok(s) = &mut self.raw() {
+            unsafe { lvgl_sys::lv_obj_del(s.as_mut()) }
         }
     }
 }
@@ -138,20 +191,17 @@ macro_rules! define_object {
         unsafe impl Send for $item {}
 
         impl $item {
-            pub fn on_event<F>(&mut self, f: F) -> $crate::LvResult<()>
-            where
-                F: FnMut(Self, $crate::support::Event<<Self as $crate::Widget>::SpecialEvent>),
-            {
+            pub fn on_event(
+                &mut self,
+                f: lv_event_cb_t,
+                filter: i32,
+                user_data: &mut cty::c_void,
+            ) -> $crate::LvResult<()> {
                 use $crate::NativeObject;
                 unsafe {
                     let mut raw = self.raw()?;
                     let obj = raw.as_mut();
-                    let user_closure = $crate::Box::new(f);
-                    obj.user_data = $crate::Box::into_raw(user_closure) as *mut cty::c_void;
-                    lvgl_sys::lv_obj_set_event_cb(
-                        obj,
-                        lvgl_sys::lv_event_cb_t::Some($crate::support::event_callback::<Self, F>),
-                    );
+                    lvgl_sys::lv_obj_add_event_cb(obj, f, filter, user_data);
                 }
                 Ok(())
             }
@@ -177,40 +227,78 @@ macro_rules! define_object {
 }
 
 bitflags! {
-    pub struct State: u32 {
+    /// Possible states of a widget. OR-ed values are possible
+    pub struct State: u16 {
         /// Normal, released
-        const DEFAULT  = lvgl_sys::LV_STATE_DEFAULT;
+        const DEFAULT  = lvgl_sys::LV_STATE_DEFAULT as u16;
         /// Toggled or checked
-        const CHECKED  = lvgl_sys::LV_STATE_CHECKED;
+        const CHECKED  = lvgl_sys::LV_STATE_CHECKED as u16;
         /// Focused via keypad or encoder or clicked via touchpad/mouse
-        const FOCUSED  = lvgl_sys::LV_STATE_FOCUSED;
+        const FOCUSED  = lvgl_sys::LV_STATE_FOCUSED as u16;
         /// Edit by an encoder
-        const EDITED   = lvgl_sys::LV_STATE_EDITED;
+        const EDITED   = lvgl_sys::LV_STATE_EDITED as u16;
         /// Hovered by mouse (not supported now)
-        const HOVERED  = lvgl_sys::LV_STATE_HOVERED;
+        const HOVERED  = lvgl_sys::LV_STATE_HOVERED as u16;
         /// Pressed
-        const PRESSED  = lvgl_sys::LV_STATE_PRESSED;
+        const PRESSED  = lvgl_sys::LV_STATE_PRESSED as u16;
         /// Disabled or inactive
-        const DISABLED = lvgl_sys::LV_STATE_DISABLED;
+        const DISABLED = lvgl_sys::LV_STATE_DISABLED as u16;
+        /// Custom state
+        const USER1 = lvgl_sys::LV_STATE_USER_1 as u16;
+        /// Custom state
+        const USER2 = lvgl_sys::LV_STATE_USER_2 as u16;
+        /// Custom state
+        const USER3 = lvgl_sys::LV_STATE_USER_3 as u16;
+        /// Custom state
+        const USER4 = lvgl_sys::LV_STATE_USER_4 as u16;
+        /// Special value can be used in some functions to target all states
+        const ANY = lvgl_sys::LV_STATE_ANY as u16;
     }
 }
 
 impl State {
-    pub(crate) fn get_bits(&self) -> u32 {
+    pub(crate) fn get_bits(&self) -> u16 {
         self.bits
     }
 }
 
+/// The widgets are built from multiple parts. For example a Base object uses the main and scrollbar parts but a Slider uses the main, the indicator and the knob parts. Parts are similar to pseudo-elements in CSS.
 pub enum Part {
+    /// A background like rectangle*/``
     Main,
+    /// The scrollbar(s)
+    SCROLLBAR,
+    /// Indicator, e.g. for slider, bar, switch, or the tick box of the checkbox
+    INDICATOR,
+    /// Like a handle to grab to adjust the value*/
+    KNOB,
+    ///  Indicate the currently selected option or section
+    SELECTED,
+    /// Used if the widget has multiple similar elements (e.g. table cells)*/
+    ITEMS,
+    /// Ticks on scales e.g. for a chart or meter
+    TICKS,
+    /// Mark a specific place e.g. text area's or chart's cursor
+    CURSOR,
+    /// Custom parts can be added from here.
+    CustomFirst,
+    ///
     All,
 }
 
-impl Into<u8> for Part {
-    fn into(self) -> u8 {
+impl Into<i32> for Part {
+    fn into(self) -> i32 {
         match self {
-            Part::Main => lvgl_sys::LV_OBJ_PART_MAIN as u8,
-            Part::All => lvgl_sys::LV_OBJ_PART_ALL as u8,
+            Part::Main => lvgl_sys::LV_PART_MAIN,
+            Part::SCROLLBAR => lvgl_sys::LV_PART_SCROLLBAR,
+            Part::INDICATOR => lvgl_sys::LV_PART_INDICATOR,
+            Part::KNOB => lvgl_sys::LV_PART_KNOB,
+            Part::SELECTED => lvgl_sys::LV_PART_SELECTED,
+            Part::ITEMS => lvgl_sys::LV_PART_ITEMS,
+            Part::TICKS => lvgl_sys::LV_PART_TICKS,
+            Part::CURSOR => lvgl_sys::LV_PART_CURSOR,
+            Part::CustomFirst => lvgl_sys::LV_PART_CUSTOM_FIRST,
+            Part::All => lvgl_sys::LV_PART_ANY,
         }
     }
 }

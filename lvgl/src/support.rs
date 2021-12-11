@@ -11,6 +11,8 @@ pub enum LvError {
     Uninitialized,
     LvOOMemory,
     AlreadyInUse,
+    InvalidArcMode,
+    InvalidBarMode,
 }
 
 #[derive(Clone)]
@@ -111,16 +113,16 @@ pub enum Event<T> {
 impl<S> TryFrom<lvgl_sys::lv_event_t> for Event<S> {
     type Error = ();
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value as u32 {
-            lvgl_sys::LV_EVENT_PRESSED => Ok(Event::Pressed),
-            lvgl_sys::LV_EVENT_PRESSING => Ok(Event::Pressing),
-            lvgl_sys::LV_EVENT_PRESS_LOST => Ok(Event::PressLost),
-            lvgl_sys::LV_EVENT_SHORT_CLICKED => Ok(Event::ShortClicked),
-            lvgl_sys::LV_EVENT_CLICKED => Ok(Event::Clicked),
-            lvgl_sys::LV_EVENT_LONG_PRESSED => Ok(Event::LongPressed),
-            lvgl_sys::LV_EVENT_LONG_PRESSED_REPEAT => Ok(Event::LongPressedRepeat),
-            lvgl_sys::LV_EVENT_RELEASED => Ok(Event::Released),
+    fn try_from(value: lvgl_sys::_lv_event_t) -> Result<Self, Self::Error> {
+        match value.code {
+            lvgl_sys::lv_event_code_t_LV_EVENT_PRESSED => Ok(Event::Pressed),
+            lvgl_sys::lv_event_code_t_LV_EVENT_PRESSING => Ok(Event::Pressing),
+            lvgl_sys::lv_event_code_t_LV_EVENT_PRESS_LOST => Ok(Event::PressLost),
+            lvgl_sys::lv_event_code_t_LV_EVENT_SHORT_CLICKED => Ok(Event::ShortClicked),
+            lvgl_sys::lv_event_code_t_LV_EVENT_CLICKED => Ok(Event::Clicked),
+            lvgl_sys::lv_event_code_t_LV_EVENT_LONG_PRESSED => Ok(Event::LongPressed),
+            lvgl_sys::lv_event_code_t_LV_EVENT_LONG_PRESSED_REPEAT => Ok(Event::LongPressedRepeat),
+            lvgl_sys::lv_event_code_t_LV_EVENT_RELEASED => Ok(Event::Released),
             _ => Err(()),
             // _ => {
             //     if let Ok(special_event_type) = S::try_from(value) {
@@ -133,23 +135,23 @@ impl<S> TryFrom<lvgl_sys::lv_event_t> for Event<S> {
     }
 }
 
-impl<S> From<Event<S>> for lvgl_sys::lv_event_t {
+/*impl<S> From<Event<S>> for lvgl_sys::lv_event_t {
     fn from(event: Event<S>) -> Self {
         let native_event = match event {
-            Event::Pressed => lvgl_sys::LV_EVENT_PRESSED,
-            Event::Pressing => lvgl_sys::LV_EVENT_PRESSING,
-            Event::PressLost => lvgl_sys::LV_EVENT_PRESS_LOST,
-            Event::ShortClicked => lvgl_sys::LV_EVENT_SHORT_CLICKED,
-            Event::Clicked => lvgl_sys::LV_EVENT_CLICKED,
-            Event::LongPressed => lvgl_sys::LV_EVENT_LONG_PRESSED,
-            Event::LongPressedRepeat => lvgl_sys::LV_EVENT_LONG_PRESSED_REPEAT,
-            Event::Released => lvgl_sys::LV_EVENT_RELEASED,
+            Event::Pressed => lvgl_sys::lv_event_code_t_LV_EVENT_PRESSED,
+            Event::Pressing => lvgl_sys::lv_event_code_t_LV_EVENT_PRESSING,
+            Event::PressLost => lvgl_sys::lv_event_code_t_LV_EVENT_PRESS_LOST,
+            Event::ShortClicked => lvgl_sys::lv_event_code_t_LV_EVENT_SHORT_CLICKED,
+            Event::Clicked => lvgl_sys::lv_event_code_t_LV_EVENT_CLICKED,
+            Event::LongPressed => lvgl_sys::lv_event_code_t_LV_EVENT_LONG_PRESSED,
+            Event::LongPressedRepeat => lvgl_sys::lv_event_code_t_LV_EVENT_LONG_PRESSED_REPEAT,
+            Event::Released => lvgl_sys::lv_event_code_t_LV_EVENT_RELEASED,
             // TODO: handle all types...
-            _ => lvgl_sys::LV_EVENT_CLICKED,
+            _ => lvgl_sys::lv_event_code_t_LV_EVENT_CLICKED,
         };
         native_event as lvgl_sys::lv_event_t
     }
-}
+}*/
 
 /// These events are sent only by pointer-like input devices (E.g. mouse or touchpad)
 pub enum PointerEvent {
@@ -205,14 +207,14 @@ impl Into<u8> for Align {
     fn into(self) -> u8 {
         let native = match self {
             Align::Center => lvgl_sys::LV_ALIGN_CENTER,
-            Align::InTopLeft => lvgl_sys::LV_ALIGN_IN_TOP_LEFT,
-            Align::InTopMid => lvgl_sys::LV_ALIGN_IN_TOP_MID,
-            Align::InTopRight => lvgl_sys::LV_ALIGN_IN_TOP_RIGHT,
-            Align::InBottomLeft => lvgl_sys::LV_ALIGN_IN_BOTTOM_LEFT,
-            Align::InBottomMid => lvgl_sys::LV_ALIGN_IN_BOTTOM_MID,
-            Align::InBottomRight => lvgl_sys::LV_ALIGN_IN_BOTTOM_RIGHT,
-            Align::InLeftMid => lvgl_sys::LV_ALIGN_IN_LEFT_MID,
-            Align::InRightMid => lvgl_sys::LV_ALIGN_IN_RIGHT_MID,
+            Align::InTopLeft => lvgl_sys::LV_ALIGN_TOP_LEFT,
+            Align::InTopMid => lvgl_sys::LV_ALIGN_TOP_MID,
+            Align::InTopRight => lvgl_sys::LV_ALIGN_TOP_RIGHT,
+            Align::InBottomLeft => lvgl_sys::LV_ALIGN_BOTTOM_LEFT,
+            Align::InBottomMid => lvgl_sys::LV_ALIGN_BOTTOM_MID,
+            Align::InBottomRight => lvgl_sys::LV_ALIGN_BOTTOM_RIGHT,
+            Align::InLeftMid => lvgl_sys::LV_ALIGN_LEFT_MID,
+            Align::InRightMid => lvgl_sys::LV_ALIGN_RIGHT_MID,
             Align::OutTopLeft => lvgl_sys::LV_ALIGN_OUT_TOP_LEFT,
             Align::OutTopMid => lvgl_sys::LV_ALIGN_OUT_TOP_MID,
             Align::OutTopRight => lvgl_sys::LV_ALIGN_OUT_TOP_RIGHT,
@@ -238,9 +240,65 @@ pub enum Animation {
 impl From<Animation> for lvgl_sys::lv_anim_enable_t {
     fn from(anim: Animation) -> Self {
         match anim {
-            Animation::ON => lvgl_sys::LV_ANIM_ON as u8,
-            Animation::OFF => lvgl_sys::LV_ANIM_OFF as u8,
+            Animation::ON => lvgl_sys::lv_anim_enable_t_LV_ANIM_ON,
+            Animation::OFF => lvgl_sys::lv_anim_enable_t_LV_ANIM_OFF,
         }
+    }
+}
+
+pub enum ArcMode {
+    NORMAL,
+    SYMMETRICAL,
+    REVERSE,
+}
+
+impl ArcMode {
+    pub fn from(mode: u8) -> LvResult<Self> {
+        match mode as i32 {
+            lvgl_sys::LV_ARC_MODE_NORMAL => Ok(Self::NORMAL),
+            lvgl_sys::LV_ARC_MODE_SYMMETRICAL => Ok(Self::SYMMETRICAL),
+            lvgl_sys::LV_ARC_MODE_REVERSE => Ok(Self::REVERSE),
+            _ => Err(LvError::InvalidArcMode),
+        }
+    }
+}
+
+impl From<ArcMode> for lvgl_sys::lv_arc_mode_t {
+    fn from(mode: ArcMode) -> Self {
+        let ret = match mode {
+            ArcMode::NORMAL => lvgl_sys::LV_ARC_MODE_NORMAL,
+            ArcMode::SYMMETRICAL => lvgl_sys::LV_ARC_MODE_SYMMETRICAL,
+            ArcMode::REVERSE => lvgl_sys::LV_ARC_MODE_REVERSE,
+        };
+        ret as u8
+    }
+}
+
+pub enum BarMode {
+    NORMAL,
+    SYMMETRICAL,
+    RANGE,
+}
+
+impl BarMode {
+    pub fn from(mode: u8) -> LvResult<Self> {
+        match mode as i32 {
+            lvgl_sys::LV_BAR_MODE_NORMAL => Ok(Self::NORMAL),
+            lvgl_sys::LV_BAR_MODE_SYMMETRICAL => Ok(Self::SYMMETRICAL),
+            lvgl_sys::LV_BAR_MODE_RANGE => Ok(Self::RANGE),
+            _ => Err(LvError::InvalidBarMode),
+        }
+    }
+}
+
+impl From<BarMode> for lvgl_sys::lv_bar_mode_t {
+    fn from(mode: BarMode) -> Self {
+        let ret = match mode {
+            BarMode::NORMAL => lvgl_sys::LV_BAR_MODE_NORMAL,
+            BarMode::SYMMETRICAL => lvgl_sys::LV_BAR_MODE_SYMMETRICAL,
+            BarMode::RANGE => lvgl_sys::LV_BAR_MODE_RANGE,
+        };
+        ret as u8
     }
 }
 
