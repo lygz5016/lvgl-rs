@@ -4,7 +4,7 @@ use crate::{LvResult, NativeObject};
 impl Label {
     pub fn set_label_align(&mut self, align: TextAlign) -> LvResult<()> {
         unsafe {
-            lvgl_sys::lv_label_set_align(self.core.raw()?.as_mut(), align as u8);
+            lvgl_sys::lv_obj_set_align(self.core.raw()?.as_mut(), align as u8);
         }
         Ok(())
     }

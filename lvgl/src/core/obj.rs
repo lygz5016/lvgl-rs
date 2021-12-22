@@ -1,6 +1,7 @@
-use crate::lv_core::style::Style;
+use crate::core::style::Style;
 use crate::Box;
 use crate::{Align, LvError, LvResult};
+use core::convert::TryInto;
 use core::ptr;
 
 /// Represents a native LVGL object
@@ -20,11 +21,14 @@ pub struct Obj {
 
 impl NativeObject for Obj {
     fn raw(&self) -> LvResult<ptr::NonNull<lvgl_sys::lv_obj_t>> {
-        if let Some(non_null_ptr) = ptr::NonNull::new(self.raw) {
+        ptr::NonNull::new(self.raw)
+            .map(|non_null_ptr| non_null_ptr)
+            .ok_or(LvError::InvalidReference)
+        /*if let Some(non_null_ptr) = ptr::NonNull::new(self.raw) {
             Ok(non_null_ptr)
         } else {
             Err(LvError::InvalidReference)
-        }
+        }*/
     }
 }
 
@@ -52,14 +56,22 @@ pub trait Widget: NativeObject {
 
     fn move_foreground(&mut self) -> LvResult<()> {
         unsafe {
-            lvgl_sys::lv_obj_move_foreground(self.raw()?.as_mut());
+            //lvgl_sys::lv_obj_move_foreground(self.raw()?.as_mut());
+            let parent = lvgl_sys::lv_obj_get_parent(self.raw()?.as_ptr());
+            //lv_obj_t * parent = lv_obj_get_parent(obj);
+            lvgl_sys::lv_obj_move_to_index(
+                parent,
+                (lvgl_sys::lv_obj_get_child_cnt(parent) - 1)
+                    .try_into()
+                    .unwrap(),
+            );
         }
         Ok(())
     }
 
     fn move_background(&mut self) -> LvResult<()> {
         unsafe {
-            lvgl_sys::lv_obj_move_background(self.raw()?.as_mut());
+            lvgl_sys::lv_obj_move_to_index(self.raw()?.as_mut(), 0);
         }
         Ok(())
     }
@@ -219,7 +231,7 @@ macro_rules! define_object {
 
             unsafe fn from_raw(raw_pointer: core::ptr::NonNull<lvgl_sys::lv_obj_t>) -> Self {
                 Self {
-                    core: $crate::Obj::from_raw(raw_pointer),
+                    core: $crate::core::Obj::from_raw(raw_pointer),
                 }
             }
         }

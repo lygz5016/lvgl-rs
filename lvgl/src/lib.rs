@@ -34,7 +34,7 @@ mod allocator;
 mod support;
 //mod ui;
 #[macro_use]
-mod lv_core;
+mod core;
 pub mod widgets;
 
 #[cfg(not(feature = "lvgl_alloc"))]
@@ -47,11 +47,11 @@ pub(crate) mod mem;
 #[cfg(not(feature = "lvgl_alloc"))]
 use crate::mem::Box;
 
-pub use lv_core::*;
+pub use crate::core::*;
 pub use support::*;
 //pub use ui::*;
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use ::core::sync::atomic::{AtomicBool, Ordering};
 
 // Initialize LVGL only once.
 static LVGL_INITIALIZED: AtomicBool = AtomicBool::new(false);

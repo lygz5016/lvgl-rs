@@ -110,12 +110,17 @@ impl Rusty for LvFunc {
                 {
                     unsafe {
                         let ptr = lvgl_sys::#original_func_name(parent.raw()?.as_mut());
-                        if let Some(raw) = core::ptr::NonNull::new(ptr) {
+                        core::ptr::NonNull::new(ptr).map(|raw|{
+                            let core = <crate::Obj as crate::Widget>::from_raw(raw);
+                            Self { core }
+                        })
+                        .ok_or(crate::LvError::InvalidReference)
+                        /*if let Some(raw) = core::ptr::NonNull::new(ptr) {
                             let core = <crate::Obj as crate::Widget>::from_raw(raw);
                             Ok(Self { core })
                         } else {
                             Err(crate::LvError::InvalidReference)
-                        }
+                        }*/
                     }
                 }
 
@@ -235,7 +240,7 @@ impl Rusty for LvFunc {
                         pub fn #func_name(#args_decl) -> crate::LvResult<&cstr_core::CStr> {
                             #args_processing
                             let ret = unsafe {
-                                cstr_core::CStr::from_ptr(lvgl_sys::#original_func_name(#args_call))
+                                cstr_core::CStr::from_ptr(*lvgl_sys::#original_func_name(#args_call) as *const i8)
                             };
                             Ok(ret)
                         }
@@ -269,16 +274,14 @@ impl Rusty for LvFunc {
                     })
                 } else if rn.eq("* mut lv_obj_t") {
                     Ok(quote! {
-                        pub fn #func_name(#args_decl) -> crate::LvResult<&mut crate::Obj> {
+                        pub fn #func_name(#args_decl) -> crate::LvResult<crate::Obj> {
                             #args_processing
                             let ret = unsafe {
-                                Ok(lvgl_sys::#original_func_name(#args_call).as_mut())
+                                lvgl_sys::#original_func_name(#args_call)
                             };
-                            if ret.is_null() {
-                                Err(crate::LvError::InvalidReference)
-                            }else{
-                                Ok(Obj::from_raw(core::ptr::NonNull::new(ret)))
-                            }
+                            core::ptr::NonNull::new(ret)
+                            .ok_or(crate::LvError::InvalidReference)
+                            .map(|ptr|unsafe { <crate::Obj as crate::Widget>::from_raw(ptr)})
                         }
                     })
                 } else {
